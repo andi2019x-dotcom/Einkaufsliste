@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.0.1',BUILD_DATE='2026-11-10',CHANGELOG=['2.0.1 (10.11.2026): Eingabe – nach Enter sofort nächster Eintrag, Cursor/Tastatur bleiben','2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
+const VERSION='2.0.2',BUILD_DATE='2026-11-10',CHANGELOG=['2.0.2 (10.11.2026): Einzelner Eintrag per 🗑 löschbar (mit Rückfrage, Papierkorb)','2.0.1 (10.11.2026): Eingabe – nach Enter sofort nächster Eintrag, Cursor/Tastatur bleiben','2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
 const CFG=window.APP_CONFIG,PURGE_MS=30*864e5;
 const CATS=[{id:'food',name:'Lebensmittel',stores:'LIDL · Penny · Kaufland'},{id:'drug',name:'Drogerie',stores:'DM · Rossmann'}];
 const berlin=d=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(d||new Date());
@@ -22,6 +22,7 @@ function editItem(i){const t=prompt('Eintrag bearbeiten',i.title);if(t&&t.trim()
 function delSel(){const its=S.items.filter(i=>S.sel.has(i.id));if(!its.length)return;
  if(!confirm(its.length+' Eintrag/Einträge löschen?\n\n• '+its.map(i=>i.title).join('\n• ')+'\n\nSie bleiben 30 Tage im Papierkorb.'))return;
  const b=db.batch();its.forEach(i=>b.update(items.doc(i.id),{deletedAt:FV.serverTimestamp(),deletedBy:uid(),updatedAt:FV.serverTimestamp()}));b.commit().catch(e=>alert(e.message));S.sel.clear();S.selMode=false;render()}
+function delOne(i){if(!confirm('„'+i.title+'“ löschen?\n\nDer Eintrag bleibt 30 Tage im Papierkorb.'))return;items.doc(i.id).update({deletedAt:FV.serverTimestamp(),deletedBy:uid(),updatedAt:FV.serverTimestamp()}).catch(e=>alert(e.message))}
 const restore=i=>items.doc(i.id).update({deletedAt:null,deletedBy:null,updatedAt:FV.serverTimestamp()}).catch(e=>alert(e.message));
 // ---- Live-Daten
 let unsubs=[];
@@ -57,7 +58,8 @@ function row(i,done){const sel=S.selMode,tg=()=>{S.sel.has(i.id)?S.sel.delete(i.
  return h('div',{class:'row'+(done?' done':'')+(S.sel.has(i.id)?' sel':''),onclick:sel?tg:null},
  h('input',{type:'checkbox',checked:sel?S.sel.has(i.id):i.done,onclick:ev=>{ev.stopPropagation();if(sel)tg();else toggle(i)}}),
  h('div',{class:'t'},i.title,h('small',{},pn(i.createdBy)+(done&&i.doneBy?' · erledigt von '+pn(i.doneBy):''))),
- sel?null:h('button',{onclick:()=>editItem(i),title:'Bearbeiten'},'✎'))}
+ sel?null:h('button',{onclick:()=>editItem(i),title:'Bearbeiten'},'✎'),
+ sel?null:h('button',{class:'d',onclick:()=>delOne(i),title:'Löschen'},'🗑'))}
 const catTabs=()=>h('div',{class:'tabs'},CATS.map(c=>h('button',{class:c.id===S.cat?'on':'',onclick:()=>{S.cat=c.id;S.sel.clear();render()}},c.name)));
 function listParts(){const lid=S.cat+'_'+S.date,cat=CATS.find(c=>c.id===S.cat),ls=S.lists.find(l=>l.id===lid);
  const its=S.items.filter(i=>i.listId===lid&&!i.deletedAt),by=(k,d)=>(a,b)=>d*((a[k]||0)-(b[k]||0));
