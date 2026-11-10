@@ -25,6 +25,14 @@ nav div{display:flex;gap:6px;max-width:980px;margin:auto}nav button{flex:1;paddi
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
 .center{max-width:420px;margin:12vh auto;display:grid;gap:12px}
 body{border-top:8px solid var(--pri)}h2{color:var(--pri)}.row input[type=checkbox]{accent-color:var(--pri)}.tabs button{border-width:3px}
+select{width:100%;min-height:48px;padding:0 10px;margin:4px 0 8px;border:2px solid var(--line);border-radius:12px;background:var(--bg);color:var(--fg);font:inherit}
+.blk{--s:55%;background:hsl(var(--h) var(--s) 50%/.13);border-left:6px solid hsl(var(--h) var(--s) 45%);border-radius:12px;padding:8px 8px 0;margin-bottom:18px}
+.blk.none{--h:0;--s:0%}
+.bh{font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:0 0 6px 2px;color:hsl(var(--h) var(--s) 32%)}
+@media(prefers-color-scheme:dark){.bh{color:hsl(var(--h) var(--s) 75%)}}
+.ov{position:fixed;inset:0;background:#0007;display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+.box{background:var(--bg);border-radius:16px;padding:16px;width:100%;max-width:420px}
+label{display:block;margin:8px 0;font-size:.85rem;color:var(--mut)}label input,label select{margin-top:4px;color:var(--fg)}
 </style></head><body><div id="app"></div>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
