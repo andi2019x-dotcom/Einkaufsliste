@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.0.0',BUILD_DATE='2026-11-10',CHANGELOG=['2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
+const VERSION='2.0.1',BUILD_DATE='2026-11-10',CHANGELOG=['2.0.1 (10.11.2026): Eingabe – nach Enter sofort nächster Eintrag, Cursor/Tastatur bleiben','2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
 const CFG=window.APP_CONFIG,PURGE_MS=30*864e5;
 const CATS=[{id:'food',name:'Lebensmittel',stores:'LIDL · Penny · Kaufland'},{id:'drug',name:'Drogerie',stores:'DM · Rossmann'}];
 const berlin=d=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(d||new Date());
@@ -34,32 +34,37 @@ function listen(){if(unsubs.length)return;
  unsubs.push(users.onSnapshot(s=>{S.users=s.docs.map(d=>({id:d.id,name:d.data().name||d.data().email||'?'}));
   if(!s.metadata.fromCache&&!s.docs.some(d=>d.id===uid()))users.doc(uid()).set({name:(S.user.displayName||S.user.email).split(' ')[0],email:S.user.email}).catch(()=>{});render()},denied))}
 // ---- Ansicht
+let TOP,REST,NAVEL;const W=h('div',{});
+const addGo=()=>{addItem(ADDINP.value);ADDINP.value='';ADDINP.focus()};
+const ADDINP=h('input',{id:'add',type:'text',placeholder:'Neuer Eintrag …',autocomplete:'off',enterkeyhint:'enter',onkeydown:e=>{if(e.key==='Enter'){e.preventDefault();addGo()}}});
+const ADDEL=h('div',{class:'add'},ADDINP,h('button',{class:'p',onpointerdown:e=>e.preventDefault(),onclick:addGo},'＋'));
+let x0,y0;W.ontouchstart=e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY};
+W.ontouchend=e=>{const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;if(Math.abs(dx)>70&&Math.abs(dy)<60){const k=CATS.findIndex(c=>c.id===S.cat);S.cat=CATS[(k+(dx<0?1:CATS.length-1))%CATS.length].id;S.sel.clear();render()}};
 function render(){const app=document.getElementById('app');if(!S.ready)return;
  if(!S.user)return showLogin();
  if(S.denied){app.replaceChildren(h('div',{class:'center'},h('h2',{},'Kein Zugriff'),h('div',{class:'sub'},S.user.email+' ist nicht freigegeben.'),h('button',{onclick:()=>auth.signOut()},'Abmelden')));return}
- const old=document.getElementById('add'),val=old?old.value:'',foc=old&&document.activeElement===old;app.replaceChildren();
- app.append(S.view==='list'?listView():S.view==='hist'?histView():S.view==='trash'?trashView():setView());
  const on=navigator.onLine,txt=!on?'Offline'+(S.pending?' – Änderungen vorgemerkt':''):S.pending?'Wird synchronisiert …':'Synchronisiert';
  const nv=(v,l)=>h('button',{class:S.view===v?'on':'',onclick:()=>{S.view=v;if(v==='list')S.date=berlin();S.selMode=false;S.sel.clear();render()}},l);
- app.append(h('nav',{},h('div',{},nv('list','Heute'),nv('hist','Früher'),nv('trash','Papierkorb'),nv('set','Einstellungen')),
-  h('div',{class:'foot'},h('span',{},h('i',{class:'dot',style:'background:'+(!on?'#c0392b':S.pending?'#e0a100':'#1b7f4b')}),txt),h('span',{},'v'+VERSION+' · '+BUILD_DATE))));
- const a=document.getElementById('add');if(a&&val){a.value=val;if(foc)a.focus()}}
+ const nav=h('nav',{},h('div',{},nv('list','Heute'),nv('hist','Früher'),nv('trash','Papierkorb'),nv('set','Einstellungen')),
+  h('div',{class:'foot'},h('span',{},h('i',{class:'dot',style:'background:'+(!on?'#c0392b':S.pending?'#e0a100':'#1b7f4b')}),txt),h('span',{},'v'+VERSION+' · '+BUILD_DATE)));
+ if(S.view==='list'){const p=listParts();
+  // Eingabefeld bleibt bestehen (wird nicht neu aufgebaut) -> Fokus/Tastatur bleiben nach Enter erhalten
+  if(ADDEL.isConnected){TOP.replaceWith(p.top);REST.replaceWith(p.rest);NAVEL.replaceWith(nav)}
+  else{W.replaceChildren(p.top,ADDEL,p.rest);app.replaceChildren(W,nav)}
+  TOP=p.top;REST=p.rest;NAVEL=nav}
+ else app.replaceChildren(S.view==='hist'?histView():S.view==='trash'?trashView():setView(),nav)}
 function row(i,done){const sel=S.selMode,tg=()=>{S.sel.has(i.id)?S.sel.delete(i.id):S.sel.add(i.id);render()};
  return h('div',{class:'row'+(done?' done':'')+(S.sel.has(i.id)?' sel':''),onclick:sel?tg:null},
  h('input',{type:'checkbox',checked:sel?S.sel.has(i.id):i.done,onclick:ev=>{ev.stopPropagation();if(sel)tg();else toggle(i)}}),
  h('div',{class:'t'},i.title,h('small',{},pn(i.createdBy)+(done&&i.doneBy?' · erledigt von '+pn(i.doneBy):''))),
  sel?null:h('button',{onclick:()=>editItem(i),title:'Bearbeiten'},'✎'))}
 const catTabs=()=>h('div',{class:'tabs'},CATS.map(c=>h('button',{class:c.id===S.cat?'on':'',onclick:()=>{S.cat=c.id;S.sel.clear();render()}},c.name)));
-function listView(){const lid=S.cat+'_'+S.date,cat=CATS.find(c=>c.id===S.cat),ls=S.lists.find(l=>l.id===lid);
+function listParts(){const lid=S.cat+'_'+S.date,cat=CATS.find(c=>c.id===S.cat),ls=S.lists.find(l=>l.id===lid);
  const its=S.items.filter(i=>i.listId===lid&&!i.deletedAt),by=(k,d)=>(a,b)=>d*((a[k]||0)-(b[k]||0));
  const op=its.filter(i=>!i.done).sort(by('createdAt',1)),dn=its.filter(i=>i.done).sort(by('doneAt',-1));
- const inp=h('input',{id:'add',type:'text',placeholder:'Neuer Eintrag …',autocomplete:'off',onkeydown:e=>{if(e.key==='Enter'){addItem(inp.value);inp.value=''}}});
- const w=h('div',{},catTabs(),h('h2',{},fmt(S.date)),h('div',{class:'sub'},cat.name+' ('+cat.stores+') · Erstellt von '+pn(ls?ls.createdBy:uid())),
-  h('div',{class:'add'},inp,h('button',{class:'p',onclick:()=>{addItem(inp.value);inp.value=''}},'＋')),
-  h('div',{class:'add'},h('button',{onclick:()=>{S.selMode=!S.selMode;S.sel.clear();render()}},S.selMode?'Abbrechen':'Auswählen'),S.selMode?h('button',{class:'d',onclick:delSel},'Löschen ('+S.sel.size+')'):null),
-  h('div',{class:'cols'},h('div',{class:'col'},h('h3',{},'Offen ('+op.length+')'),op.map(i=>row(i,0))),h('div',{class:'col'},h('h3',{},'Erledigt ('+dn.length+')'),dn.map(i=>row(i,1)))));
- let x0,y0;w.ontouchstart=e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY};
- w.ontouchend=e=>{const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;if(Math.abs(dx)>70&&Math.abs(dy)<60){const k=CATS.findIndex(c=>c.id===S.cat);S.cat=CATS[(k+(dx<0?1:CATS.length-1))%CATS.length].id;S.sel.clear();render()}};return w}
+ return{top:h('div',{},catTabs(),h('h2',{},fmt(S.date)),h('div',{class:'sub'},cat.name+' ('+cat.stores+') · Erstellt von '+pn(ls?ls.createdBy:uid()))),
+  rest:h('div',{},h('div',{class:'add'},h('button',{onclick:()=>{S.selMode=!S.selMode;S.sel.clear();render()}},S.selMode?'Abbrechen':'Auswählen'),S.selMode?h('button',{class:'d',onclick:delSel},'Löschen ('+S.sel.size+')'):null),
+  h('div',{class:'cols'},h('div',{class:'col'},h('h3',{},'Offen ('+op.length+')'),op.map(i=>row(i,0))),h('div',{class:'col'},h('h3',{},'Erledigt ('+dn.length+')'),dn.map(i=>row(i,1)))))}}
 function histView(){const ls=S.lists.filter(l=>l.cat===S.cat).sort((a,b)=>b.date.localeCompare(a.date));
  return h('div',{},catTabs(),h('h2',{},'Frühere Einkaufszettel'),ls.map(l=>{const it=S.items.filter(i=>i.listId===l.id&&!i.deletedAt);
   return h('div',{class:'row',onclick:()=>{S.date=l.date;S.view='list';render()}},h('div',{class:'t'},fmt(l.date),h('small',{},it.filter(i=>i.done).length+' von '+it.length+' erledigt')))}))}
