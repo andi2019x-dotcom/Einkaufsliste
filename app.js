@@ -1,5 +1,5 @@
 'use strict';
-const VERSION='2.1.0',BUILD_DATE='2026-11-10',CHANGELOG=['2.1.0 (10.11.2026): Sortierung nach Laden/Einkaufsweg, Kategorien-Blöcke, automatische Zuordnung, Läden-Verwaltung','2.0.3 (10.11.2026): Kategorien farbig, Anzeigename neuer Konten = Teil vor dem @','2.0.2 (10.11.2026): Einzelner Eintrag per 🗑 löschbar (mit Rückfrage, Papierkorb)','2.0.1 (10.11.2026): Eingabe – nach Enter sofort nächster Eintrag, Cursor/Tastatur bleiben','2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
+const VERSION='2.1.1',BUILD_DATE='2026-11-10',CHANGELOG=['2.1.1 (10.11.2026): Fix Anzeige der Liste bei „Ohne Sortierung“','2.1.0 (10.11.2026): Sortierung nach Laden/Einkaufsweg, Kategorien-Blöcke, automatische Zuordnung, Läden-Verwaltung','2.0.3 (10.11.2026): Kategorien farbig, Anzeigename neuer Konten = Teil vor dem @','2.0.2 (10.11.2026): Einzelner Eintrag per 🗑 löschbar (mit Rückfrage, Papierkorb)','2.0.1 (10.11.2026): Eingabe – nach Enter sofort nächster Eintrag, Cursor/Tastatur bleiben','2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
 const CFG=window.APP_CONFIG,PURGE_MS=30*864e5;
 const CATS=[{id:'food',name:'Lebensmittel',stores:'LIDL · Penny · Kaufland',color:'#1b7f4b'},{id:'drug',name:'Drogerie',stores:'DM · Rossmann',color:'#8e44ad'}];
 const berlin=d=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(d||new Date());
@@ -116,7 +116,7 @@ function listParts(){const lid=S.cat+'_'+S.date,cat=CATS.find(c=>c.id===S.cat),l
  const its=S.items.filter(i=>i.listId===lid&&!i.deletedAt);
  const op=its.filter(i=>!i.done),dn=its.filter(i=>i.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
  const gs=groups(op,store);
- const opEls=gs.map(g=>g.name==null?g.its.map(i=>row(i,0,g.its)):h('div',{class:'blk'+(g.hue==null?' none':''),style:g.hue==null?'':'--h:'+g.hue},h('div',{class:'bh'},g.name),g.its.map(i=>row(i,0,g.its))));
+ const opEls=gs.flatMap(g=>g.name==null?g.its.map(i=>row(i,0,g.its)):h('div',{class:'blk'+(g.hue==null?' none':''),style:g.hue==null?'':'--h:'+g.hue},h('div',{class:'bh'},g.name),g.its.map(i=>row(i,0,g.its))));
  const sel=h('select',{onchange:e=>{localStorage.setItem('store_'+S.cat,e.target.value);render()}},[...storesFor(S.cat).map(s=>h('option',{value:s.id,selected:!!store&&s.id===store.id},'Laden: '+s.name)),h('option',{value:'-',selected:!store},'Ohne Sortierung')]);
  return{top:h('div',{},catTabs(),h('h2',{},fmt(S.date)),h('div',{class:'sub'},cat.name+' ('+cat.stores+') · Erstellt von '+pn(ls?ls.createdBy:uid())),sel),
   rest:h('div',{},h('div',{class:'add'},h('button',{onclick:()=>{S.selMode=!S.selMode;S.arr=false;S.sel.clear();render()}},S.selMode?'Abbrechen':'Auswählen'),
