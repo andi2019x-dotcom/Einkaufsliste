@@ -1,0 +1,31 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Einkaufsliste</title><link rel="manifest" href="manifest.json"><link rel="icon" href="icon.svg">
+<meta name="theme-color" content="#1b7f4b">
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#6b7280;--line:#e5e7eb;--pri:#1b7f4b;--card:#f6f7f8;--bad:#c0392b}
+@media(prefers-color-scheme:dark){:root{--bg:#111315;--fg:#f2f2f2;--mut:#9aa1ab;--line:#2a2e33;--card:#1b1e22}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.35 system-ui,sans-serif;padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+#app{max-width:980px;margin:auto;padding:12px}
+button,input{font:inherit;color:inherit}
+button{min-height:48px;padding:0 16px;border:1px solid var(--line);background:var(--card);border-radius:12px}
+button.p{background:var(--pri);color:#fff;border-color:var(--pri)}button.d{color:var(--bad)}
+input[type=text],input[type=password]{width:100%;min-height:52px;padding:0 14px;border:2px solid var(--line);border-radius:12px;background:var(--bg)}
+.tabs{display:flex;gap:8px;margin-bottom:10px}.tabs button{flex:1;font-weight:600}.tabs button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+h2{margin:6px 0 0;font-size:1.3rem}.sub{color:var(--mut);font-size:.9rem;margin-bottom:10px}
+.add{display:flex;gap:8px;margin:10px 0}.add input{flex:1}
+.cols{display:grid;gap:14px}@media(min-width:700px){.cols{grid-template-columns:1fr 1fr}}
+.col h3{margin:8px 0;font-size:1rem;color:var(--mut)}
+.row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;background:var(--card)}
+.row input[type=checkbox]{width:30px;height:30px;flex:none}.row .t{flex:1;word-break:break-word}.row small{color:var(--mut);display:block;font-size:.75rem}
+.row.done .t{text-decoration:line-through;color:var(--mut)}.row.sel{outline:3px solid var(--pri)}.row button{min-height:44px;padding:0 12px}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+nav div{display:flex;gap:6px;max-width:980px;margin:auto}nav button{flex:1;padding:0 4px;font-size:.85rem}nav button.on{background:var(--pri);color:#fff}
+.foot{display:flex;justify-content:space-between;font-size:.72rem;color:var(--mut);max-width:980px;margin:4px auto 0}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.center{max-width:420px;margin:12vh auto;display:grid;gap:12px}
+</style></head><body><div id="app"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script><script src="app.js"></script></body></html>

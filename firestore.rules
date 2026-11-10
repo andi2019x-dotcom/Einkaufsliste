@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function ok() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'andi.2019.x@gmail.com','claudi.2024.x@gmail.com',
+          'carlotta.seltmann@gmail.com','emma.seltmann@gmail.com'];
+    }
+    function titleOk() { return request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 200; }
+    match /users/{u} {
+      allow read: if ok();
+      allow create, update: if ok() && request.auth.uid == u;
+    }
+    match /lists/{l} {
+      allow read: if ok();
+      allow create: if ok();
+    }
+    match /items/{i} {
+      allow read: if ok();
+      allow create: if ok() && titleOk() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if ok() && titleOk();
+      // endgültiges Löschen nur, wenn seit dem Löschzeitpunkt mindestens 30 Tage vergangen sind (serverseitig)
+      allow delete: if ok() && resource.data.deletedAt is timestamp
+        && resource.data.deletedAt < request.time - duration.value(30, 'd');
+    }
+  }
+}
