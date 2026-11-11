@@ -12,9 +12,10 @@ service cloud.firestore {
       allow read: if ok();
       allow create, update: if ok() && request.auth.uid == u;
     }
+    // Tageszettel (cat food/drug) und freie Zettel (cat free: name, archived, deleted). NEU in 3.0.0: update (Umbenennen, Archivieren, Löschen-Markierung)
     match /lists/{l} {
       allow read: if ok();
-      allow create: if ok();
+      allow create, update: if ok();
     }
     match /items/{i} {
       allow read: if ok();
@@ -24,5 +25,10 @@ service cloud.firestore {
       allow delete: if ok() && resource.data.deletedAt is timestamp
         && resource.data.deletedAt < request.time - duration.value(30, 'd');
     }
+    // Sammlungen seit Version 2.1.0 (Sortierung nach Laden)
+    match /pcats/{c} { allow read, write: if ok(); }
+    match /stores/{s} { allow read, write: if ok(); }
+    match /products/{p} { allow read, write: if ok(); }
+    match /config/{c} { allow read, create, update: if ok(); }
   }
 }
