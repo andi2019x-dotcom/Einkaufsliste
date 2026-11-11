@@ -1,11 +1,11 @@
 'use strict';
-const VERSION='3.0.0',BUILD_DATE='2026-11-11',CHANGELOG=['3.0.0 (11.11.2026): Text einfügen und als Einkaufsliste analysieren (Vorschau), freie Einkaufszettel ohne Datum („Freie Listen“)','2.1.1 (10.11.2026): Fix Anzeige der Liste bei „Ohne Sortierung“','2.1.0 (10.11.2026): Sortierung nach Laden/Einkaufsweg, Kategorien-Blöcke, automatische Zuordnung, Läden-Verwaltung','2.0.3 (10.11.2026): Kategorien farbig, Anzeigename neuer Konten = Teil vor dem @','2.0.2 (10.11.2026): Einzelner Eintrag per 🗑 löschbar (mit Rückfrage, Papierkorb)','2.0.1 (10.11.2026): Eingabe – nach Enter sofort nächster Eintrag, Cursor/Tastatur bleiben','2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
+const VERSION='3.1.0',BUILD_DATE='2026-11-11',CHANGELOG=['3.1.0 (11.11.2026): Lebensmittel/Drogerie: ein fortlaufender Zettel ohne Datum, „Einkauf abschließen“ (offene Einträge wandern auf den neuen Zettel); alte Tageszettel unter „Früher“','3.0.0 (11.11.2026): Text einfügen und als Einkaufsliste analysieren (Vorschau), freie Einkaufszettel ohne Datum („Freie Listen“)','2.1.1 (10.11.2026): Fix Anzeige der Liste bei „Ohne Sortierung“','2.1.0 (10.11.2026): Sortierung nach Laden/Einkaufsweg, Kategorien-Blöcke, automatische Zuordnung, Läden-Verwaltung','2.0.3 (10.11.2026): Kategorien farbig, Anzeigename neuer Konten = Teil vor dem @','2.0.2 (10.11.2026): Einzelner Eintrag per 🗑 löschbar (mit Rückfrage, Papierkorb)','2.0.1 (10.11.2026): Eingabe – nach Enter sofort nächster Eintrag, Cursor/Tastatur bleiben','2.0.0 (10.11.2026): Firebase + Google-Anmeldung, Offline-Sync, Papierkorb'];
 const CFG=window.APP_CONFIG,PURGE_MS=30*864e5;
 const CATS=[{id:'food',name:'Lebensmittel',stores:'LIDL · Penny · Kaufland',color:'#1b7f4b'},{id:'drug',name:'Drogerie',stores:'DM · Rossmann',color:'#8e44ad'}];
 const FREE={id:'free',name:'Freie Listen',stores:'',color:'#d35400'},ALL=[...CATS,FREE],CAT=id=>ALL.find(c=>c.id===id);
 const berlin=d=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'}).format(d||new Date());
 const fmt=d=>new Date(d+'T12:00:00').toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-const S={fid:null,cat:'food',date:berlin(),view:'list',sel:new Set(),selMode:false,items:[],lists:[],users:[],user:null,ready:false,pending:false,denied:false,ens:{},pcats:[],stores:[],prod:new Map(),arr:false,editStore:null};
+const S={lid:null,gotL:false,gotI:false,fid:null,cat:'food',date:berlin(),view:'list',sel:new Set(),selMode:false,items:[],lists:[],users:[],user:null,ready:false,pending:false,denied:false,ens:{},pcats:[],stores:[],prod:new Map(),arr:false,editStore:null};
 if(!window.firebase||!CFG.FIREBASE||CFG.FIREBASE.apiKey.includes('DEIN')){document.getElementById('app').textContent='Konfiguration fehlt: config.js ausfüllen (siehe README).';throw new Error('config')}
 firebase.initializeApp(CFG.FIREBASE);
 const auth=firebase.auth(),db=firebase.firestore(),FV=firebase.firestore.FieldValue;
@@ -142,16 +142,30 @@ function anaPreview(text,lid){const rows=anaRun(text,lid),list=h('div',{class:'p
   ov=h('div',{class:'ov'},h('div',{class:'box wide'},h('h3',{},'Vorschau'),h('div',{class:'sub'},'Einträge ändern, abwählen oder ergänzen. Erst „Übernehmen“ legt sie an.'),list,
    h('div',{class:'add',style:'margin-bottom:0'},h('button',{onclick:()=>{rows.push({title:'',cat:'none',on:true,note:'',ucat:false});fill();rows[rows.length-1].ti.focus()}},'＋ Eintrag'),h('button',{onclick:()=>{ov.remove();anaOpen(text)}},'Zurück'),h('button',{onclick:()=>ov.remove()},'Abbrechen'),ok)));
  ok.onclick=()=>{ov.remove();anaCommit(rows,lid)};fill();document.body.append(ov)}
-function anaCommit(rows,lid){const sel=rows.filter(r=>r.on&&r.title.trim());if(!sel.length)return;ensureList(lid);const t0=Date.now();
+function anaCommit(rows,lid){const sel=rows.filter(r=>r.on&&r.title.trim());if(!sel.length)return;const t0=Date.now();
  for(let k=0;k<sel.length;k+=200){const b=db.batch();
   sel.slice(k,k+200).forEach((r,j)=>{const t=r.title.trim().slice(0,200);b.set(items.doc(),itemDoc(t,lid,r.cat,t0+k+j));
    const bs=baseOf(t);if(r.ucat&&r.cat!==guess(bs)){S.prod.set(pkey(bs),r.cat);b.set(products.doc(pkey(bs)),{cat:r.cat})}}); // manuelle Korrektur wird gemerkt
   b.commit().catch(e=>alert('Speichern fehlgeschlagen: '+e.message))}}
 // ---- Aktionen (Firestore speichert offline dauerhaft vor und überträgt später; Änderungen je Dokument/Feld)
-const curLid=()=>S.cat==='free'?S.fid:S.cat+'_'+S.date;
-const itemDoc=(title,lid,pcat,pos)=>({title,pcat,pos,listId:lid,cat:S.cat,date:S.cat==='free'?null:S.date,createdBy:uid(),createdAt:FV.serverTimestamp(),updatedAt:FV.serverTimestamp(),done:false,doneBy:null,doneAt:null,deletedAt:null,deletedBy:null});
-function ensureList(lid){if(S.cat!=='free'&&!S.lists.some(l=>l.id===lid))lists.doc(lid).set({cat:S.cat,date:S.date,createdBy:uid(),createdAt:FV.serverTimestamp()}).catch(()=>{})}
-function addItem(title){title=title.trim();if(!title)return;const lid=curLid();if(!lid)return;ensureList(lid);
+const openRun=c=>S.lists.filter(l=>l.cat===c&&l.run&&!l.closedAt).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+const viewLid=()=>S.cat==='free'?S.fid:S.lid||(openRun(S.cat)||{}).id||null;
+// fortlaufender Zettel je Bereich: legt ihn an, falls keiner offen ist; beim allerersten Mal wandern die offenen Einträge des neuesten alten Tageszettels hinein
+function ensureRun(c){const r=openRun(c);if(r)return r.id;if(S.ens['run_'+c])return S.ens['run_'+c];if(!S.gotL||!S.gotI)return null;
+ const any=S.lists.some(l=>l.cat===c&&l.run),id=c+(any?'_r'+Date.now():'_run_start'),b=db.batch();S.ens['run_'+c]=id;
+ b.set(lists.doc(id),{cat:c,run:true,createdBy:uid(),createdAt:FV.serverTimestamp()},{merge:true});
+ if(!any){const old=S.lists.filter(l=>l.cat===c&&!l.run&&l.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  if(old)S.items.filter(i=>i.listId===old.id&&!i.done&&!i.deletedAt).forEach(i=>b.update(items.doc(i.id),{listId:id,updatedAt:FV.serverTimestamp()}))}
+ b.commit().catch(()=>{delete S.ens['run_'+c]});return id}
+const curLid=()=>S.cat==='free'?S.fid:S.lid||ensureRun(S.cat);
+function closeRun(){const r=openRun(S.cat);if(!r)return;const op=S.items.filter(i=>i.listId===r.id&&!i.done&&!i.deletedAt);
+ if(!confirm('Einkauf abschließen?\n\n'+(op.length?op.length+' offene(r) Eintrag/Einträge wandern auf den neuen Zettel.':'Der Zettel wandert unter „Früher“.')))return;
+ const id=S.cat+'_r'+Date.now();S.ens['run_'+S.cat]=id;
+ const all=[['u',lists.doc(r.id),{closedAt:FV.serverTimestamp()}],['s',lists.doc(id),{cat:S.cat,run:true,createdBy:uid(),createdAt:FV.serverTimestamp()}],...op.map(i=>['u',items.doc(i.id),{listId:id,updatedAt:FV.serverTimestamp()}])];
+ for(let k=0;k<all.length;k+=400){const b=db.batch();all.slice(k,k+400).forEach(o=>o[0]==='s'?b.set(o[1],o[2]):b.update(o[1],o[2]));b.commit().catch(e=>alert(e.message))}
+ S.lid=null;render()}
+const itemDoc=(title,lid,pcat,pos)=>({title,pcat,pos,listId:lid,cat:S.cat,date:null,createdBy:uid(),createdAt:FV.serverTimestamp(),updatedAt:FV.serverTimestamp(),done:false,doneBy:null,doneAt:null,deletedAt:null,deletedBy:null});
+function addItem(title){title=title.trim();if(!title)return;const lid=curLid();if(!lid)return;
  items.doc().set(itemDoc(title,lid,guess(title),Date.now())).catch(e=>alert('Speichern fehlgeschlagen: '+e.message))}
 const toggle=i=>items.doc(i.id).update({done:!i.done,doneBy:i.done?null:uid(),doneAt:i.done?null:FV.serverTimestamp(),updatedAt:FV.serverTimestamp()}).catch(e=>alert(e.message));
 function editItem(i){const cur=catOf(i.pcat)?i.pcat:'none';
@@ -169,11 +183,11 @@ const restore=i=>{const l=S.lists.find(x=>x.id===i.listId),b=db.batch();b.update
 // ---- Live-Daten
 let unsubs=[];
 const denied=e=>{if(e.code==='permission-denied'){S.denied=true;render()}};
-function ensureToday(){const d=berlin();for(const c of CATS){const id=c.id+'_'+d;if(!S.lists.some(l=>l.id===id)&&!S.ens[id]){S.ens[id]=1;lists.doc(id).set({cat:c.id,date:d,createdBy:uid(),createdAt:FV.serverTimestamp()}).catch(()=>{})}}}
+function ensureToday(){for(const c of CATS)ensureRun(c.id)}
 function purge(){if(S.purged)return;S.purged=true;const old=S.items.filter(i=>i.deletedAt&&Date.now()-i.deletedAt>PURGE_MS).slice(0,400);if(!old.length)return;const b=db.batch();old.forEach(i=>b.delete(items.doc(i.id)));b.commit().catch(()=>{})}
 function listen(){if(unsubs.length)return;
- unsubs.push(items.onSnapshot({includeMetadataChanges:true},s=>{S.items=s.docs.map(d=>{const x=d.data({serverTimestamps:'estimate'});return{id:d.id,title:x.title,listId:x.listId,createdBy:x.createdBy,createdAt:ms(x.createdAt),done:!!x.done,doneBy:x.doneBy,doneAt:ms(x.doneAt),deletedAt:ms(x.deletedAt),pcat:x.pcat||'none',pos:x.pos||null}});S.pending=s.metadata.hasPendingWrites;S.denied=false;if(!s.metadata.fromCache)purge();render()},denied));
- unsubs.push(lists.onSnapshot(s=>{S.lists=s.docs.map(d=>{const x=d.data({serverTimestamps:'estimate'});return{id:d.id,cat:x.cat,date:x.date,createdBy:x.createdBy,name:x.name||'',archived:!!x.archived,deleted:!!x.deleted,createdAt:ms(x.createdAt)}});if(!s.metadata.fromCache||!navigator.onLine)ensureToday();render()},denied));
+ unsubs.push(items.onSnapshot({includeMetadataChanges:true},s=>{S.items=s.docs.map(d=>{const x=d.data({serverTimestamps:'estimate'});return{id:d.id,title:x.title,listId:x.listId,createdBy:x.createdBy,createdAt:ms(x.createdAt),done:!!x.done,doneBy:x.doneBy,doneAt:ms(x.doneAt),deletedAt:ms(x.deletedAt),pcat:x.pcat||'none',pos:x.pos||null}});S.pending=s.metadata.hasPendingWrites;S.denied=false;S.gotI=true;if(!s.metadata.fromCache)purge();if(!s.metadata.fromCache||!navigator.onLine)ensureToday();render()},denied));
+ unsubs.push(lists.onSnapshot(s=>{S.lists=s.docs.map(d=>{const x=d.data({serverTimestamps:'estimate'});return{id:d.id,cat:x.cat,date:x.date,createdBy:x.createdBy,name:x.name||'',archived:!!x.archived,deleted:!!x.deleted,createdAt:ms(x.createdAt),run:!!x.run,closedAt:ms(x.closedAt)}});S.gotL=true;if(!s.metadata.fromCache||!navigator.onLine)ensureToday();render()},denied));
  unsubs.push(pcats.onSnapshot(s=>{S.pcats=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.sort||0)-(b.sort||0));if(!s.metadata.fromCache&&!s.size)seed();render()},denied));
  unsubs.push(stores.onSnapshot(s=>{S.stores=s.docs.map(d=>({order:[],off:[],...d.data(),id:d.id})).sort((a,b)=>(a.sort||0)-(b.sort||0));render()},denied));
  unsubs.push(products.onSnapshot(s=>{S.prod=new Map(s.docs.map(d=>[d.id,d.data().cat]))},denied));
@@ -185,15 +199,15 @@ const addGo=()=>{addItem(ADDINP.value);ADDINP.value='';ADDINP.focus()};
 const ADDINP=h('input',{id:'add',type:'text',placeholder:'Neuer Eintrag …',autocomplete:'off',enterkeyhint:'enter',onkeydown:e=>{if(e.key==='Enter'){e.preventDefault();addGo()}}});
 const ADDEL=h('div',{class:'add'},ADDINP,h('button',{class:'p',onpointerdown:e=>e.preventDefault(),onclick:addGo},'＋'));
 let x0,y0;W.ontouchstart=e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY};
-W.ontouchend=e=>{const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;if(Math.abs(dx)>70&&Math.abs(dy)<60){const k=ALL.findIndex(c=>c.id===S.cat);S.cat=ALL[(k+(dx<0?1:ALL.length-1))%ALL.length].id;S.fid=null;S.sel.clear();render()}};
+W.ontouchend=e=>{const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;if(Math.abs(dx)>70&&Math.abs(dy)<60){const k=ALL.findIndex(c=>c.id===S.cat);S.cat=ALL[(k+(dx<0?1:ALL.length-1))%ALL.length].id;S.fid=null;S.lid=null;S.sel.clear();render()}};
 function render(){const app=document.getElementById('app');if(!S.ready)return;
  if(!S.user)return showLogin();
  if(S.denied){app.replaceChildren(h('div',{class:'center'},h('h2',{},'Kein Zugriff'),h('div',{class:'sub'},S.user.email+' ist nicht freigegeben.'),h('button',{onclick:()=>auth.signOut()},'Abmelden')));return}
  if(S.cat==='free'&&S.fid){const fl=S.lists.find(x=>x.id===S.fid);if(fl&&fl.deleted)S.fid=null}
  const cc=(S.view==='list'||S.view==='hist')?CAT(S.cat).color:'#1b7f4b';document.documentElement.style.setProperty('--pri',cc);const tm=document.querySelector('meta[name=theme-color]');if(tm)tm.content=cc;
  const on=navigator.onLine,txt=!on?'Offline'+(S.pending?' – Änderungen vorgemerkt':''):S.pending?'Wird synchronisiert …':'Synchronisiert';
- const nv=(v,l)=>h('button',{class:(S.view===v||(v==='set'&&S.view==='store'))?'on':'',onclick:()=>{S.view=v;if(v==='list')S.date=berlin();S.selMode=false;S.sel.clear();render()}},l);
- const nav=h('nav',{},h('div',{},nv('list',S.cat==='free'?'Zettel':'Heute'),nv('hist','Früher'),nv('trash','Papierkorb'),nv('set','Einstellungen')),
+ const nv=(v,l)=>h('button',{class:(S.view===v||(v==='set'&&S.view==='store'))?'on':'',onclick:()=>{S.view=v;if(v==='list')S.lid=null;S.selMode=false;S.sel.clear();render()}},l);
+ const nav=h('nav',{},h('div',{},nv('list','Zettel'),nv('hist','Früher'),nv('trash','Papierkorb'),nv('set','Einstellungen')),
   h('div',{class:'foot'},h('span',{},h('i',{class:'dot',style:'background:'+(!on?'#c0392b':S.pending?'#e0a100':'#1b7f4b')}),txt),h('span',{},'v'+VERSION+' · '+BUILD_DATE)));
  if(S.view==='list'&&!(S.cat==='free'&&!S.fid)){const p=listParts();
   // Eingabefeld bleibt bestehen (wird nicht neu aufgebaut) -> Fokus/Tastatur bleiben nach Enter erhalten
@@ -207,7 +221,7 @@ function row(i,done,grp){const sel=S.selMode,tg=()=>{S.sel.has(i.id)?S.sel.delet
  h('div',{class:'t'},i.title,h('small',{},pn(i.createdBy)+(done&&i.doneBy?' · erledigt von '+pn(i.doneBy):''))),
  sel?null:(S.arr&&!done&&grp)?[h('button',{onclick:()=>moveItem(i,grp,-1),title:'nach oben'},'▲'),h('button',{onclick:()=>moveItem(i,grp,1),title:'nach unten'},'▼')]
  :[h('button',{onclick:()=>editItem(i),title:'Bearbeiten'},'✎'),h('button',{class:'d',onclick:()=>delOne(i),title:'Löschen'},'🗑')])}
-const catTabs=()=>h('div',{class:'tabs'},ALL.map(c=>h('button',{class:c.id===S.cat?'on':'',style:'border-color:'+c.color+(c.id===S.cat?';background:'+c.color+';color:#fff':''),onclick:()=>{S.cat=c.id;S.fid=null;S.sel.clear();render()}},c.name)));
+const catTabs=()=>h('div',{class:'tabs'},ALL.map(c=>h('button',{class:c.id===S.cat?'on':'',style:'border-color:'+c.color+(c.id===S.cat?';background:'+c.color+';color:#fff':''),onclick:()=>{S.cat=c.id;S.fid=null;S.lid=null;S.sel.clear();render()}},c.name)));
 // ---- Freie Einkaufszettel (ohne Datum): Sammlung "lists" mit cat:'free', name, archived, deleted
 const freeLists=arch=>S.lists.filter(l=>l.cat==='free'&&!l.deleted&&!!l.archived===arch).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 const openFree=id=>{S.cat='free';S.fid=id;S.view='list';S.selMode=false;S.sel.clear();render()};
@@ -225,7 +239,7 @@ function freeView(){const ls=freeLists(false);
   h('div',{class:'add'},h('button',{class:'p',style:'flex:1',onclick:newFree},'＋ Neuer Zettel')),
   ls.map(l=>{const it=S.items.filter(i=>i.listId===l.id&&!i.deletedAt);return h('div',{class:'row',onclick:()=>openFree(l.id)},h('div',{class:'t'},l.name||'Zettel',h('small',{},it.filter(i=>!i.done).length+' offen · '+it.filter(i=>i.done).length+' erledigt · von '+pn(l.createdBy))))}),
   ls.length?null:h('div',{class:'sub'},'Noch keine freien Zettel.'))}
-function listParts(){const free=S.cat==='free',lid=curLid(),cat=CAT(S.cat),ls=S.lists.find(l=>l.id===lid),store=curStore();
+function listParts(){const free=S.cat==='free',lid=viewLid(),cat=CAT(S.cat),ls=S.lists.find(l=>l.id===lid),store=curStore();
  const its=S.items.filter(i=>i.listId===lid&&!i.deletedAt);
  const op=its.filter(i=>!i.done),dn=its.filter(i=>i.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
  const gs=groups(op,store);
@@ -234,23 +248,23 @@ function listParts(){const free=S.cat==='free',lid=curLid(),cat=CAT(S.cat),ls=S.
  const head=free?h('div',{},catTabs(),h('button',{onclick:()=>{S.fid=null;render()}},'← Alle Zettel'),h('h2',{},ls?ls.name:'…'),
    h('div',{class:'sub'},'Freier Zettel · Erstellt von '+pn(ls?ls.createdBy:uid())+(ls&&ls.archived?' · archiviert':'')),
    h('div',{class:'add'},h('button',{onclick:()=>ls&&renFree(ls)},'✎ Name'),h('button',{onclick:()=>ls&&arcFree(ls)},ls&&ls.archived?'↩ Aktivieren':'📦 Archiv'),h('button',{class:'d',onclick:()=>ls&&delFree(ls)},'🗑 Löschen')),sel)
-  :h('div',{},catTabs(),h('h2',{},fmt(S.date)),h('div',{class:'sub'},cat.name+' ('+cat.stores+') · Erstellt von '+pn(ls?ls.createdBy:uid())),sel);
+  :h('div',{},catTabs(),S.lid?h('button',{onclick:()=>{S.lid=null;render()}},'← Aktueller Zettel'):null,h('h2',{},S.lid?(ls&&ls.date?fmt(ls.date):'Einkauf vom '+(ls&&ls.closedAt?new Date(ls.closedAt).toLocaleDateString('de-DE'):'?')):'Einkaufszettel'),h('div',{class:'sub'},cat.name+' ('+cat.stores+')'+(S.lid?'':' · fortlaufend, ohne Datum')),S.lid?null:h('div',{class:'add'},h('button',{class:'p',style:'flex:1',onclick:closeRun},'✔ Einkauf abschließen')),sel);
  return{top:head,
   rest:h('div',{},h('div',{class:'add'},h('button',{onclick:()=>{S.selMode=!S.selMode;S.arr=false;S.sel.clear();render()}},S.selMode?'Abbrechen':'Auswählen'),
    S.selMode?h('button',{class:'d',onclick:delSel},'Löschen ('+S.sel.size+')'):h('button',{class:S.arr?'p':'',onclick:()=>{S.arr=!S.arr;render()}},S.arr?'Fertig':'Anordnen'),
    h('button',{style:'flex:1',onclick:()=>anaOpen()},'📋 Text einfügen')),
   h('div',{class:'cols'},h('div',{class:'col'},h('h3',{},'Offen ('+op.length+')'),opEls),h('div',{class:'col'},h('h3',{},'Erledigt ('+dn.length+')'),dn.map(i=>row(i,1)))))}}
-function histView(){const free=S.cat==='free',ls=free?[]:S.lists.filter(l=>l.cat===S.cat).sort((a,b)=>b.date.localeCompare(a.date)),ar=freeLists(true);
+function histView(){const free=S.cat==='free',hk=l=>l.date?new Date(l.date+'T12:00:00').getTime():l.closedAt||0,ls=free?[]:S.lists.filter(l=>l.cat===S.cat&&(l.date||(l.run&&l.closedAt))).sort((a,b)=>hk(b)-hk(a)),ar=freeLists(true);
  return h('div',{},catTabs(),free?null:h('h2',{},'Frühere Einkaufszettel'),
   ls.map(l=>{const it=S.items.filter(i=>i.listId===l.id&&!i.deletedAt);
-   return h('div',{class:'row',onclick:()=>{S.date=l.date;S.view='list';render()}},h('div',{class:'t'},fmt(l.date),h('small',{},it.filter(i=>i.done).length+' von '+it.length+' erledigt')))}),
+   return h('div',{class:'row',onclick:()=>{S.lid=l.id;S.view='list';render()}},h('div',{class:'t'},l.date?fmt(l.date):'Einkauf vom '+new Date(l.closedAt).toLocaleDateString('de-DE'),h('small',{},it.filter(i=>i.done).length+' von '+it.length+' erledigt')))}),
   h('h2',{},'Archivierte freie Zettel'),
   ar.map(l=>{const it=S.items.filter(i=>i.listId===l.id&&!i.deletedAt);
    return h('div',{class:'row',onclick:()=>openFree(l.id)},h('div',{class:'t'},l.name||'Zettel',h('small',{},it.filter(i=>i.done).length+' von '+it.length+' erledigt')),h('button',{onclick:ev=>{ev.stopPropagation();arcFree(l)}},'Aktivieren'))}),
   ar.length?null:h('div',{class:'sub'},'Keine archivierten Zettel.'))}
 function trashView(){const it=S.items.filter(i=>i.deletedAt&&Date.now()-i.deletedAt<PURGE_MS).sort((a,b)=>b.deletedAt-a.deletedAt);
  return h('div',{},h('h2',{},'Papierkorb'),h('div',{class:'sub'},'30 Tage Aufbewahrung, endgültiges Löschen erst danach (vom Server erzwungen)'),
-  it.map(i=>{const l=S.lists.find(x=>x.id===i.listId),c=l&&CATS.find(c=>c.id===l.cat);return h('div',{class:'row'},h('div',{class:'t'},i.title,h('small',{},(l?(l.cat==='free'?'Freie Liste „'+(l.name||'?')+'“':fmt(l.date)+' · '+(c?c.name:'')):'')+' · gelöscht '+new Date(i.deletedAt).toLocaleDateString('de-DE'))),h('button',{onclick:()=>restore(i)},'Wiederherstellen'))}),it.length?null:h('div',{class:'sub'},'Leer'))}
+  it.map(i=>{const l=S.lists.find(x=>x.id===i.listId),c=l&&CATS.find(c=>c.id===l.cat);return h('div',{class:'row'},h('div',{class:'t'},i.title,h('small',{},(l?(l.cat==='free'?'Freie Liste „'+(l.name||'?')+'“':(l.date?fmt(l.date):'Einkaufszettel')+' · '+(c?c.name:'')):'')+' · gelöscht '+new Date(i.deletedAt).toLocaleDateString('de-DE'))),h('button',{onclick:()=>restore(i)},'Wiederherstellen'))}),it.length?null:h('div',{class:'sub'},'Leer'))}
 const LN={food:'Lebensmittel',drug:'Drogerie'};
 function storeDlg(s){modal(s?'Laden bearbeiten':'Laden hinzufügen',[{label:'Name',value:s?s.name:'',max:40},{label:'Einkaufsliste',value:s?s.list:S.cat,options:[['food','Lebensmittel'],['drug','Drogerie']]}],([n,l])=>{n=n.trim();if(!n)return;
  (s?stores.doc(s.id).update({name:n,list:l}):stores.add({name:n,list:l,order:[...DEF_ORDER],off:[],sort:Date.now()})).catch(e=>alert(e.message))})}
@@ -280,6 +294,6 @@ function showLogin(){const msg=h('div',{class:'sub'}),p=new firebase.auth.Google
  document.getElementById('app').replaceChildren(h('div',{class:'center'},h('h2',{},'🛒 Einkaufsliste'),h('button',{class:'p',onclick:go},'Mit Google anmelden'),msg))}
 // ---- Start
 if('serviceWorker'in navigator){const had=!!navigator.serviceWorker.controller;navigator.serviceWorker.register('sw.js').then(r=>setInterval(()=>r.update(),36e5));navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had)location.reload()})}
-auth.onAuthStateChanged(u=>{S.user=u;S.ready=true;if(u)listen();else{unsubs.forEach(f=>f());unsubs=[];S.items=[];S.lists=[];S.users=[];S.pcats=[];S.stores=[];S.prod=new Map();S.purged=false;S.ens={}}render()});
+auth.onAuthStateChanged(u=>{S.user=u;S.ready=true;if(u)listen();else{unsubs.forEach(f=>f());unsubs=[];S.items=[];S.lists=[];S.users=[];S.pcats=[];S.stores=[];S.prod=new Map();S.purged=false;S.ens={};S.gotL=false;S.gotI=false;S.lid=null}render()});
 addEventListener('online',render);addEventListener('offline',render);
 addEventListener('visibilitychange',()=>{if(!document.hidden){if(S.view==='list'&&berlin()!==S.date)S.date=berlin();if(S.user)ensureToday();render()}});
